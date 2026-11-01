@@ -56,6 +56,9 @@
   * { box-sizing: border-box; }
   html { padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px); background: var(--bg); }
   body { margin: 0; }
+  .ios-tip { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--brand-soft); margin-top: 16px; font-size: 14px; }
+  .ios-tip ol { margin: 4px 0 0; padding-left: 18px; }
+  .ios-tip .close { margin-left: auto; flex: none; }
   .copy-row { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
   .copy-row input { flex: 1 1 200px; min-width: 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); font-size: 13px; }
   [hidden] { display: none !important; }
@@ -238,6 +241,7 @@
     </div>
     <div class="group-pick"><select id="groupSelect" aria-label="Group"></select></div>
     <span class="mode hide-sm" id="modeBadge" hidden></span>
+    <button class="btn btn-sm" id="btnInstall" hidden>Install app</button>
     <button class="btn hide-sm" id="btnSettle">Settle up</button>
     <button class="btn btn-primary hide-sm" id="btnAdd">+ Add expense</button>
   </div>
@@ -251,6 +255,7 @@
 
 <main class="wrap gutter">
   <div id="notice"></div>
+  <div id="installTip"></div>
   <section id="welcome" class="view" hidden>
     <div class="welcome">
       <div class="brand-mark" style="width:56px;height:56px;border-radius:16px;margin:0 auto">
@@ -1504,9 +1509,36 @@ function bind() {
   });
 }
 
+
+/* ================= Install as an app ================= */
+var installPrompt = null;
+function isStandalone() { return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true; }
+function isIOS() { return /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+function renderInstallTip() {
+  var el = $('installTip');
+  if (!isIOS() || isStandalone() || store.get('sb.iosTip') === 'off') { el.innerHTML = ''; return; }
+  el.innerHTML = '<div class="ios-tip" role="note"><div><b>Install SplitBook on your iPhone</b>' +
+    '<ol><li>Tap the <b>Share</b> button (the square with an arrow) in Safari.</li><li>Choose <b>Add to Home Screen</b>, then <b>Add</b>.</li></ol></div>' +
+    '<button class="btn btn-ghost btn-sm close" data-action="hide-ios-tip" aria-label="Hide install tip">✕</button></div>';
+}
+window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); installPrompt = e; $('btnInstall').hidden = false; });
+window.addEventListener('appinstalled', function () { installPrompt = null; $('btnInstall').hidden = true; toast('SplitBook is installed. Open it from your home screen or app list.'); });
+document.addEventListener('click', function (ev) {
+  if (ev.target.closest('[data-action="hide-ios-tip"]')) { store.set('sb.iosTip', 'off'); renderInstallTip(); }
+});
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
+
 /* ================= Boot ================= */
 (function init() {
   bind();
+  renderInstallTip();
+  $('btnInstall').addEventListener('click', function () {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    installPrompt.userChoice.then(function () { installPrompt = null; $('btnInstall').hidden = true; });
+  });
   S.groupId = store.get('sb.group');
   var t = store.get('sb.tab');
   if (['overview', 'activity', 'insights', 'group'].indexOf(t) >= 0) S.tab = t;
